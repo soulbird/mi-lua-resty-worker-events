@@ -26,6 +26,7 @@ local min = math.min
 
 -- event keys to shm
 local KEY_LAST_ID = "events-last"         -- ID of last event posted
+local KEY_START_ID= "events-start"        -- ID of start event
 local KEY_DATA    = "events-data:"        -- serialized event json data
 local KEY_ONE     = "events-one:"         -- key for 'one' events check
 
@@ -133,6 +134,12 @@ local _M = {
 -- @return event_id
 local function get_event_id()
   return _dict:get(KEY_LAST_ID) or 0
+end
+
+-- gets start event id
+-- @return start event_id
+local function get_start_id()
+  return _dict:get(KEY_START_ID) or 0
 end
 
 -- gets event data
@@ -569,6 +576,29 @@ _M.unregister = function(callback, source, ...)
   return (success == true)
 end
 
+-- ref: https://github.com/Kong/lua-resty-worker-events/issues/25
+--- usage:
+---
+--- require("resty.worker.events").init(shm_name)
+--- package.loaded["resty.worker.events"] = nil
+---
+-- init the shared memory to set correct event start id
+-- `package.loaded["resty.worker.events"] = nil` should be called after this function
+-- for this module use some of global var, it should be uninitialezed when worker init
+-- shm: name of the shared memory to use, must be same as @shm of configure
+_M.init = function(shm)
+  local dict = ngx.shared[shm]
+  if not dict then
+    return nil, 'shm "' .. tostring(shm) .. '" not found'
+  end
+
+  local start_id = dict:get(KEY_LAST_ID) or 0
+
+  dict:set(KEY_START_ID, start_id)
+
+  return true
+end
+
 -- (re) configures the event system
 -- shm     : name of the shared memory to use
 -- timeout : timeout of event data stored in shm (in seconds)
@@ -658,7 +688,7 @@ _M.configure = function(opts)
   _wait_interval = wait_interval
   _wait_max = wait_max
   _shm_retries = shm_retries
-  _last_event = _last_event or get_event_id()
+  _last_event = _last_event or get_start_id()
 
   if not started then
     -- we're live, let's celebrate it with an event
