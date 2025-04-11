@@ -45,6 +45,12 @@ http {
     # the size depends on the number of event to handle:
     lua_shared_dict process_events 1m;
 
+    init_by_lua_block {
+        -- init the correct event start id, avoid some event lost during reload
+        require("resty.worker.events").init("process_events")
+        package.loaded["resty.worker.events"] = nil
+    }
+
     init_worker_by_lua_block {
         local ev = require "resty.worker.events"
 
